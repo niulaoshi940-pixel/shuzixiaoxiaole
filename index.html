@@ -1,0 +1,75 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>数学消消乐：冒险之路</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Arial Rounded MT Bold', 'ZCOOL KuaiLe', sans-serif;
+            background: #87CEEB;
+        }
+
+        .sky-gradient {
+            background: linear-gradient(180deg, #5eb5f7 0%, #a1d9f9 50%, #e0f6ff 100%);
+        }
+
+        /* 消除类游戏常用的弹性动画 */
+        .pop-scale {
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .pop-scale:active {
+            transform: scale(0.9);
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .game-grid {
+            display: grid;
+            gap: 8px;
+            user-select: none;
+        }
+
+        .block-standard { background: white; border: 3px solid #e2e8f0; }
+        .block-ice { background: #e0f2fe; border: 3px solid #bae6fd; position: relative; }
+        .block-ice::after { content: '❄️'; position: absolute; font-size: 0.8rem; top: 2px; right: 2px; opacity: 0.6; }
+        .block-locked { background: #f1f5f9; border: 3px solid #94a3b8; position: relative; }
+        .block-locked::after { content: '🔒'; position: absolute; font-size: 0.8rem; top: 2px; right: 2px; opacity: 0.6; }
+        .block-bomb { background: #fee2e2; border: 3px solid #fca5a5; position: relative; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
+</script>
+</head>
+<body class="sky-gradient h-screen w-screen overflow-hidden">
+    <div id="root" class="h-full w-full"></div>
+</body>
+</html>
