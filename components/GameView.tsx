@@ -144,9 +144,13 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
     }
     if (isFrozen || isGameOver) return;
 
+    // Use 100ms interval for precision countdown
     const timer = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
-    }, 1000);
+      setTimeLeft(prev => {
+        const next = prev - 0.1;
+        return next <= 0 ? 0 : next;
+      });
+    }, 100);
     return () => clearInterval(timer);
   }, [timeLeft, isFrozen, isGameOver]);
 
@@ -302,8 +306,8 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
             </p>
         </div>
         <div className="text-right">
-            <div className={`text-2xl font-black ${timeLeft < 10 ? 'text-red-400 animate-pulse' : ''}`}>
-                {timeLeft}s
+            <div className={`text-2xl font-black min-w-[4rem] ${timeLeft < 10 ? 'text-red-400 animate-pulse' : ''}`}>
+                {timeLeft.toFixed(1)}s
             </div>
         </div>
       </div>
