@@ -57,7 +57,15 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full select-none overflow-hidden">
+    <div className="h-full w-full select-none overflow-hidden relative">
+      {/* 全局“🐮🐮作品”悬浮标识 */}
+      <div className="fixed bottom-32 left-4 z-[9999] pointer-events-none">
+        <div className="bg-white/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/50 shadow-lg -rotate-12 floating flex items-center gap-1.5 transform scale-90 origin-left">
+          <span className="text-xl">🐮🐮</span>
+          <span className="text-xs font-black text-red-800 tracking-widest uppercase opacity-80">作品</span>
+        </div>
+      </div>
+
       {gameState === 'home' && <Home onStart={() => setGameState('map')} />}
       {gameState === 'map' && (
         <MapView 

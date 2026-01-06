@@ -12,12 +12,6 @@ export const ITEM_COSTS = {
 
 /**
  * Generates dynamic level configuration based on levelId.
- * Implements strict progression:
- * 1-20: Sum <= 10
- * 21-40: Sum <= 20
- * 41-60: Subtraction (Minuend <= 20)
- * 61-80: Sum <= 100
- * 81-100: Mixed Challenge
  */
 export const getLevelConfig = (levelId: number): LevelConfig => {
   let mode = GameMode.ADDITION;
@@ -31,24 +25,25 @@ export const getLevelConfig = (levelId: number): LevelConfig => {
   } else if (levelId <= 80) {
     mode = GameMode.ADDITION; 
   } else {
-    // 81-100 Mixed
     const modes = [GameMode.ADDITION, GameMode.SUBTRACTION, GameMode.MULTIPLICATION, GameMode.DIVISION];
     mode = modes[levelId % 4];
   }
 
-  // Grid sizing: Higher levels have more blocks
-  let gridSize = 4; // 16 blocks
-  if (levelId > 10) gridSize = 5; // 25 blocks
-  if (levelId > 30) gridSize = 6; // 36 blocks
-  if (levelId > 50) gridSize = 7; // 49 blocks
-  if (levelId > 75) gridSize = 8; // 64 blocks
-  if (levelId > 90) gridSize = 9; // 81 blocks
+  // Grid sizing
+  let gridSize = 4;
+  if (levelId > 10) gridSize = 5;
+  if (levelId > 30) gridSize = 6;
+  if (levelId > 50) gridSize = 7;
+  if (levelId > 75) gridSize = 8;
+  if (levelId > 90) gridSize = 9;
 
-  // Time limit (countdown) - gets tighter as levels progress
-  const baseTime = 120;
-  const timeLimit = Math.max(30, baseTime - (levelId * 0.9));
+  /**
+   * Linear decay for time limit:
+   * Level 1 = 160s, Level 100 = 60s
+   * Calculation: Start - (CurrentLevel - 1) * (TotalDrop / (TotalLevels - 1))
+   */
+  const timeLimit = 160 - (levelId - 1) * (100 / 99);
 
-  // Special block rates increase with level
   const distractorRate = Math.min(0.5, (levelId / 180));
   
   const specialRates: any = {};
