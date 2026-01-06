@@ -1,24 +1,24 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Block, BlockType, GameMode, LevelConfig } from '../types';
-import { getLevelConfig, ITEM_COSTS } from '../constants';
+import { getLevelConfig } from '../constants';
 
 interface GameViewProps {
   levelId: number;
   inventory: { hint: number; freeze: number; bomb: number; refresh: number };
-  onComplete: (levelId: number, stars: number, rewards: any) => void;
+  onComplete: (levelId: number, stars: number, rewards: any, remainingInventory: any) => void;
   onQuit: () => void;
 }
 
-const playSound = (type: 'match' | 'win' | 'hint') => {
+const playSound = (type: 'match' | 'win' | 'hint' | 'useItem') => {
   const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContext) return;
   const ctx = new AudioContext();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
 
-  if (type === 'match') {
-    osc.type = 'triangle';
+  if (type === 'match' || type === 'useItem') {
+    osc.type = type === 'match' ? 'triangle' : 'sine';
     osc.frequency.setValueAtTime(523.25, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(1046.5, ctx.currentTime + 0.1);
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
@@ -66,7 +66,9 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
   const [isGameOver, setIsGameOver] = useState(false);
   const [isVictory, setIsVictory] = useState(false);
   const [victoryStats, setVictoryStats] = useState<{ stars: number; rewards: Record<string, number> }>({ stars: 0, rewards: {} });
-  const [localHints, setLocalHints] = useState(3); 
+  
+  // 核心：当前关卡内的实时道具库存
+  const [sessionInventory, setSessionInventory] = useState(inventory);
 
   const generateTriple = useCallback(() => {
     let a, b, c;
@@ -164,7 +166,6 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
 
   useEffect(() => { initBoard(); }, [initBoard]);
 
-  // 全局胜负判定逻辑
   useEffect(() => {
     if (blocks.length > 0 && !isVictory && !isGameOver) {
       const isDone = blocks.every(b => b.isRemoved || b.isFiller);
@@ -244,16 +245,17 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
   };
 
   const finishLevel = () => {
-      if (isVictory) return; // 防止重复触发
+      if (isVictory) return;
       playSound('win');
       let starCount = 1;
       if (timeLeft > config.timeLimit * 0.6) starCount = 3;
       else if (timeLeft > config.timeLimit * 0.3) starCount = 2;
       
+      // 核心调整：每关固定奖励 2 次重组机会，未使用的次数会自动累积
       const rewards = { 
         hint: levelId % 5 === 0 ? 1 : 0, 
         freeze: levelId % 10 === 0 ? 1 : 0, 
-        refresh: levelId % 3 === 0 ? 1 : 0,
+        refresh: 2, // 固定奖励 2 次
         bomb: levelId % 7 === 0 ? 1 : 0
       };
       
@@ -262,7 +264,7 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
   };
 
   const useHint = () => {
-    if (localHints <= 0 || isGameOver || isVictory) return;
+    if (sessionInventory.hint <= 0 || isGameOver || isVictory) return;
     const active = blocks.filter(b => !b.isRemoved && !b.isFiller && b.type !== BlockType.ICE);
     for (let i = 0; i < active.length; i++) {
       for (let j = 0; j < active.length; j++) {
@@ -278,7 +280,7 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
           if (isMatch) {
             playSound('hint');
             setHintedIds([a.id, b.id, c.id]);
-            setLocalHints(prev => prev - 1);
+            setSessionInventory(prev => ({ ...prev, hint: prev.hint - 1 }));
             setTimeout(() => {
               setHintedIds(prev => prev.filter(id => id !== a.id && id !== b.id && id !== c.id));
             }, 5000);
@@ -290,33 +292,37 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
   };
 
   const useFreeze = () => {
-    if (inventory.freeze <= 0 || isGameOver || isVictory) return;
+    if (sessionInventory.freeze <= 0 || isGameOver || isVictory) return;
+    playSound('useItem');
     setIsFrozen(true);
+    setSessionInventory(prev => ({ ...prev, freeze: prev.freeze - 1 }));
     setTimeout(() => setIsFrozen(false), 8000);
   };
 
   const useBombItem = () => {
-    if (inventory.bomb <= 0 || isGameOver || isVictory) return;
+    if (sessionInventory.bomb <= 0 || isGameOver || isVictory) return;
     const active = blocks.filter(b => !b.isRemoved && !b.isFiller);
     if (active.length > 0) {
-      playSound('match');
-      // 随机选取最多3个方块消除
+      playSound('useItem');
       const targets = active.sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id);
       setBlocks(prev => prev.map(b => targets.includes(b.id) ? { ...b, isRemoved: true } : b));
-      // 额外获得得分补偿
       setScore(prev => prev + targets.length * 50);
+      setSessionInventory(prev => ({ ...prev, bomb: prev.bomb - 1 }));
     }
   };
 
   const useRefresh = () => {
-    if (inventory.refresh <= 0 || isGameOver || isVictory) return;
+    if (sessionInventory.refresh <= 0 || isGameOver || isVictory) return;
     const interactiveBlocks = blocks.filter(b => !b.isRemoved && !b.isFiller);
     if (interactiveBlocks.length === 0) return;
+    
+    playSound('useItem');
     const targetCount = Math.floor(interactiveBlocks.length / 3) * 3;
     const removedExtraCount = interactiveBlocks.length - targetCount;
     const newBlocks = [...blocks];
     const interactiveIndices = blocks.map((b, i) => (!b.isRemoved && !b.isFiller) ? i : -1).filter(i => i !== -1);
     const shuffledIndices = interactiveIndices.sort(() => Math.random() - 0.5);
+    
     for (let i = 0; i < removedExtraCount; i++) {
       const idx = shuffledIndices.pop()!;
       newBlocks[idx] = { ...newBlocks[idx], isRemoved: true };
@@ -330,12 +336,12 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
     }
     setBlocks(newBlocks);
     setSelectedIds([]);
-    setHintedIds([]); 
+    setHintedIds([]);
+    setSessionInventory(prev => ({ ...prev, refresh: prev.refresh - 1 }));
   };
 
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden relative">
-      {/* 顶部标题栏 */}
       <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-500 text-white flex justify-between items-center shadow-xl z-10">
         <button onClick={onQuit} className="font-black bg-blue-700/50 border-2 border-white/20 px-4 py-2 rounded-xl active:scale-95 text-sm">退出</button>
         <div className="text-center">
@@ -365,7 +371,6 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
           {blocks.map(block => {
             const isSelected = selectedIds.includes(block.id);
             const isHinted = hintedIds.includes(block.id);
-            
             return (
               <div 
                 key={block.id} 
@@ -389,7 +394,6 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
         </div>
       </div>
 
-      {/* 算式预览区 */}
       <div className="h-24 bg-white border-t-2 border-blue-50 flex items-center justify-center shadow-inner">
           <div className="text-3xl font-black text-blue-600">
              {selectedIds.length > 0 ? (
@@ -406,37 +410,35 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
                  })}
                  {selectedIds.length < 3 && <span className="text-gray-200 animate-pulse">?</span>}
                </div>
-             ) : <span className="text-gray-300 text-lg font-bold italic tracking-widest uppercase">寻找数学公式...</span>}
+             ) : <span className="text-gray-300 text-lg font-bold italic tracking-widest uppercase text-center px-4">找到正确的算式吧！</span>}
           </div>
       </div>
 
-      {/* 底部道具区 */}
       <div className="p-4 pb-8 bg-sky-100 flex justify-around items-center border-t-4 border-white shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
-          <button onClick={useHint} disabled={localHints <= 0} className={`flex flex-col items-center group active:scale-95 transition-all ${localHints <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
+          <button onClick={useHint} disabled={sessionInventory.hint <= 0} className={`flex flex-col items-center group active:scale-95 transition-all ${sessionInventory.hint <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-yellow-300 group-active:translate-y-1">💡</div>
-              <span className="text-sm font-black mt-2 text-blue-800">提示 {localHints}</span>
+              <span className="text-sm font-black mt-2 text-blue-800">提示 {sessionInventory.hint}</span>
           </button>
-          <button onClick={useFreeze} className="flex flex-col items-center group active:scale-95">
-              <div className={`w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-blue-300 group-active:translate-y-1 ${inventory.freeze === 0 ? 'grayscale opacity-50' : ''}`}>❄️</div>
-              <span className="text-sm font-black mt-2 text-blue-800">冻结 {inventory.freeze}</span>
+          <button onClick={useFreeze} disabled={sessionInventory.freeze <= 0} className={`flex flex-col items-center group active:scale-95 transition-all ${sessionInventory.freeze <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-blue-300 group-active:translate-y-1">❄️</div>
+              <span className="text-sm font-black mt-2 text-blue-800">冻结 {sessionInventory.freeze}</span>
           </button>
-          <button onClick={useBombItem} className="flex flex-col items-center group active:scale-95">
-              <div className={`w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-red-300 group-active:translate-y-1 ${inventory.bomb === 0 ? 'grayscale opacity-50' : ''}`}>💣</div>
-              <span className="text-sm font-black mt-2 text-blue-800">炸弹 {inventory.bomb}</span>
+          <button onClick={useBombItem} disabled={sessionInventory.bomb <= 0} className={`flex flex-col items-center group active:scale-95 transition-all ${sessionInventory.bomb <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-red-300 group-active:translate-y-1">💣</div>
+              <span className="text-sm font-black mt-2 text-blue-800">炸弹 {sessionInventory.bomb}</span>
           </button>
-          <button onClick={useRefresh} className="flex flex-col items-center group active:scale-95">
-              <div className={`w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-orange-300 group-active:translate-y-1 ${inventory.refresh === 0 ? 'grayscale opacity-50' : ''}`}>🔄</div>
-              <span className="text-sm font-black mt-2 text-blue-800">重组 {inventory.refresh}</span>
+          <button onClick={useRefresh} disabled={sessionInventory.refresh <= 0} className={`flex flex-col items-center group active:scale-95 transition-all ${sessionInventory.refresh <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-orange-300 group-active:translate-y-1">🔄</div>
+              <span className="text-sm font-black mt-2 text-blue-800">重组 {sessionInventory.refresh}</span>
           </button>
       </div>
 
-      {/* 过关成功页面 */}
       {isVictory && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center bg-blue-900/60 backdrop-blur-md p-8">
               <div className="bg-white rounded-[3rem] p-10 w-full max-w-sm shadow-[0_25px_50px_rgba(0,0,0,0.5)] border-8 border-yellow-400 flex flex-col items-center transform scale-in">
                   <div className="absolute -top-16 text-8xl drop-shadow-2xl">🏆</div>
-                  <h2 className="text-5xl font-black text-blue-600 mt-4 mb-2 italic">关卡成功!</h2>
-                  <p className="text-gray-400 font-bold mb-6">正在向北京进发...</p>
+                  <h2 className="text-5xl font-black text-blue-600 mt-4 mb-2 italic text-center">进京顺利!</h2>
+                  <p className="text-gray-400 font-bold mb-6">下一站已经解锁...</p>
                   
                   <div className="flex gap-4 mb-8">
                     {[1, 2, 3].map(s => (
@@ -445,26 +447,20 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
                   </div>
 
                   <div className="w-full bg-blue-50 rounded-3xl p-6 mb-8 border-2 border-blue-100">
-                      <div className="flex justify-between items-center mb-2">
-                          <span className="text-blue-900 font-bold">本关得分</span>
-                          <span className="text-3xl font-black text-blue-600">{score}</span>
-                      </div>
-                      <hr className="border-blue-100 my-2" />
-                      <div className="text-sm text-blue-800/60 font-bold mb-2 uppercase tracking-widest text-center">获得奖励</div>
-                      <div className="flex justify-around">
+                      <div className="text-sm text-blue-800/60 font-bold mb-4 uppercase tracking-widest text-center underline">获得进京物资</div>
+                      <div className="flex justify-around items-end">
                           {Object.entries(victoryStats.rewards).map(([key, val]) => (val as number) > 0 && (
                              <div key={key} className="flex flex-col items-center">
-                                <span className="text-2xl">{key === 'hint' ? '💡' : key === 'freeze' ? '❄️' : key === 'refresh' ? '🔄' : '💣'}</span>
-                                <span className="text-xs font-black text-blue-600">+{val as number}</span>
+                                <span className="text-3xl">{key === 'hint' ? '💡' : key === 'freeze' ? '❄️' : key === 'refresh' ? '🔄' : '💣'}</span>
+                                <span className="text-lg font-black text-blue-600">+{val as number}</span>
                              </div>
                           ))}
-                          {Object.values(victoryStats.rewards).every(v => v === 0) && <span className="text-gray-400 text-xs italic">本关暂无道具奖励</span>}
                       </div>
                   </div>
 
                   <button 
-                    onClick={() => onComplete(levelId, victoryStats.stars, victoryStats.rewards)}
-                    className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-[0_10px_30px_rgba(59,130,246,0.5)] text-3xl border-b-8 border-blue-800 active:translate-y-2 active:border-b-0 transition-all"
+                    onClick={() => onComplete(levelId, victoryStats.stars, victoryStats.rewards, sessionInventory)}
+                    className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-[0_10px_30px_rgba(59,130,246,0.5)] text-3xl border-b-8 border-blue-800 active:translate-y-2 active:border-b-4 transition-all"
                   >
                     继续前进
                   </button>
@@ -472,14 +468,13 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
           </div>
       )}
 
-      {/* 挑战失败页面 */}
       {isGameOver && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-8 text-center">
               <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-sm shadow-2xl scale-in border-8 border-white">
                   <div className="text-7xl mb-4">⏰</div>
-                  <h2 className="text-4xl font-black text-red-600 mb-4 drop-shadow-sm">挑战失败</h2>
-                  <p className="text-gray-600 mb-8 text-xl font-bold">时间耗尽了！别灰心，整理装备再出发。</p>
-                  <button onClick={() => window.location.reload()} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl mb-4 text-2xl active:scale-95 transition-transform">重新开始</button>
+                  <h2 className="text-4xl font-black text-red-600 mb-4 drop-shadow-sm">时间到了</h2>
+                  <p className="text-gray-600 mb-8 text-xl font-bold">别灰心，整理装备再出发！</p>
+                  <button onClick={() => window.location.reload()} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl mb-4 text-2xl active:scale-95 transition-transform">重新挑战</button>
                   <button onClick={onQuit} className="w-full bg-gray-100 text-gray-500 font-bold py-4 rounded-2xl text-2xl active:scale-95 transition-transform">返回地图</button>
               </div>
           </div>

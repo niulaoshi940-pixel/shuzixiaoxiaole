@@ -12,7 +12,6 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('math_adventure_progress');
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Ensure refresh exists for migrations
       if (!parsed.inventory.refresh) parsed.inventory.refresh = 3;
       return parsed;
     }
@@ -34,13 +33,19 @@ const App: React.FC = () => {
     }
   };
 
-  const handleGameComplete = (levelId: number, stars: number, rewards: Partial<UserProgress['inventory']>) => {
+  const handleGameComplete = (
+    levelId: number, 
+    stars: number, 
+    rewards: Partial<UserProgress['inventory']>,
+    remainingInventory: UserProgress['inventory']
+  ) => {
     setProgress(prev => {
       const newUnlocked = Math.max(prev.unlockedLevel, levelId + 1);
       const newStars = { ...prev.stars };
       newStars[levelId] = Math.max(prev.stars[levelId] || 0, stars);
       
-      const newInventory = { ...prev.inventory };
+      // 先同步关卡结束时的真实剩余库存，再累加本关获得的奖励
+      const newInventory = { ...remainingInventory };
       if (rewards.hint) newInventory.hint += rewards.hint;
       if (rewards.freeze) newInventory.freeze += rewards.freeze;
       if (rewards.bomb) newInventory.bomb += rewards.bomb;
@@ -58,7 +63,6 @@ const App: React.FC = () => {
 
   return (
     <div className="h-full w-full select-none overflow-hidden relative">
-      {/* 全局“🐮🐮作品”悬浮标识 */}
       <div className="fixed bottom-32 left-4 z-[9999] pointer-events-none">
         <div className="bg-white/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/50 shadow-lg -rotate-12 floating flex items-center gap-1.5 transform scale-90 origin-left">
           <span className="text-xl">🐮🐮</span>
