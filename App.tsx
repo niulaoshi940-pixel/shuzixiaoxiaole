@@ -12,13 +12,14 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('math_adventure_progress');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (!parsed.inventory.refresh) parsed.inventory.refresh = 3;
+      // 确保炸弹库存存在，若旧档没有则初始化
+      if (parsed.inventory.bomb === undefined) parsed.inventory.bomb = 1;
       return parsed;
     }
     return {
       unlockedLevel: 1,
       stars: {},
-      inventory: { hint: 3, freeze: 2, bomb: 2, refresh: 3 }
+      inventory: { hint: 3, freeze: 2, bomb: 1, refresh: 3 }
     };
   });
 
@@ -44,12 +45,14 @@ const App: React.FC = () => {
       const newStars = { ...prev.stars };
       newStars[levelId] = Math.max(prev.stars[levelId] || 0, stars);
       
-      // 先同步关卡结束时的真实剩余库存，再累加本关获得的奖励
-      const newInventory = { ...remainingInventory };
-      if (rewards.hint) newInventory.hint += rewards.hint;
-      if (rewards.freeze) newInventory.freeze += rewards.freeze;
-      if (rewards.bomb) newInventory.bomb += rewards.bomb;
-      if (rewards.refresh) newInventory.refresh += rewards.refresh;
+      // 同步需累积的道具：炸弹和冻结
+      const newInventory = { ...prev.inventory };
+      newInventory.bomb = remainingInventory.bomb + (rewards.bomb || 0);
+      newInventory.freeze = remainingInventory.freeze + (rewards.freeze || 0);
+      
+      // 提示和重组不累积，在 GameView 中已处理，这里保持原有库存或设为初始值
+      newInventory.hint = 3; 
+      newInventory.refresh = 3;
 
       return {
         ...prev,

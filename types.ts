@@ -27,6 +27,7 @@ export interface Block {
 export interface LevelConfig {
   id: number;
   mode: GameMode;
+  maxVal: number; // New: Maximum value for math operations
   gridSize: number;
   timeLimit: number;
   targetStars: number[];
