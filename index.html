@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>数学消消乐：冒险之路</title>
+    <title>数学消消乐：进京之路</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
@@ -21,7 +21,6 @@
             background: linear-gradient(180deg, #5eb5f7 0%, #a1d9f9 50%, #e0f6ff 100%);
         }
 
-        /* 消除类游戏常用的弹性动画 */
         .pop-scale {
             transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
@@ -56,7 +55,6 @@
             animation: cute-walk 0.8s ease-in-out infinite;
         }
 
-        /* 爆炸效果动画 */
         @keyframes explosion-bounce {
             0% { transform: scale(0.5); opacity: 0; }
             50% { transform: scale(1.5); opacity: 1; }
@@ -66,7 +64,6 @@
             animation: explosion-bounce 0.5s ease-out forwards;
         }
 
-        /* 网格抖动动画 */
         @keyframes shake {
             0%, 100% { transform: translate(0, 0); }
             10%, 30%, 50%, 70%, 90% { transform: translate(-4px, 0); }
@@ -88,6 +85,14 @@
         .block-locked { background: #f1f5f9; border: 3px solid #94a3b8; position: relative; }
         .block-locked::after { content: '🔒'; position: absolute; font-size: 0.8rem; top: 2px; right: 2px; opacity: 0.6; }
         .block-bomb { background: #fee2e2; border: 3px solid #fca5a5; position: relative; }
+
+        @keyframes scale-in {
+          0% { transform: scale(0.5); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .scale-in {
+          animation: scale-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
     </style>
 <script type="importmap">
 {
@@ -101,6 +106,5 @@
 </head>
 <body class="sky-gradient h-screen w-screen overflow-hidden">
     <div id="root" class="h-full w-full"></div>
-    <script type="module" src="/index.tsx"></script>
 </body>
 </html>

@@ -3,7 +3,8 @@ export enum GameMode {
   ADDITION = 'addition',
   SUBTRACTION = 'subtraction',
   MULTIPLICATION = 'multiplication',
-  DIVISION = 'division'
+  DIVISION = 'division',
+  TARGET_SUM = 'target_sum'
 }
 
 export enum BlockType {

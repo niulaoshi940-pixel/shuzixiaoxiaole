@@ -11,7 +11,7 @@ export const LEVEL_NAMES = [
   "卫辉市区", "卫辉唐庄镇", "卫辉汲城镇", "淇县高村镇", "淇县庙口镇",
   "淇县北阳镇", "淇县西岗镇", "淇滨区上葛村", "鹤壁金山办事处", "鹤壁石林镇",
   "汤阴宜沟镇北", "汤阴韩庄镇", "汤阴县城南", "汤阴羑里城", "淇县县城",
-  "鹤壁市淇滨区", "鹤壁北戴店", "汤阴县城", "宜沟镇", "安阳文峰区",
+  "鹤壁市淇滨区", "鹤戴戴店", "汤阴县城", "宜沟镇", "安阳文峰区",
   "安阳北关区", "安阳柏庄镇", "临漳县(冀豫界)", "磁县县城", "邯郸南部开发区",
   "邯郸市中心(丛台)", "邯郸联纺路", "永年区", "永年界河店", "沙河市褡裢镇",
   "邢台南和区", "邢台市中心(开元寺)", "邢台内丘县", "内丘官庄镇", "临城县城",
@@ -38,56 +38,79 @@ export const getLevelConfig = (levelId: number): LevelConfig => {
   let maxVal = 10;
   
   if (levelId <= 10) {
+    // 1-10关为10以内加法
     mode = GameMode.ADDITION;
     maxVal = 10;
   } else if (levelId <= 20) {
+    // 11-20关为10以内减法
     mode = GameMode.SUBTRACTION;
     maxVal = 10;
   } else if (levelId <= 30) {
+    // 21-30关为20以内加法
     mode = GameMode.ADDITION;
     maxVal = 20;
   } else if (levelId <= 40) {
+    // 31-40关为20以内减法
     mode = GameMode.SUBTRACTION;
     maxVal = 20;
   } else if (levelId <= 50) {
+    // 41-50关为40以内加法
+    mode = GameMode.ADDITION;
+    maxVal = 40;
+  } else if (levelId <= 60) {
+    // 51-60关为50以内加法
     mode = GameMode.ADDITION;
     maxVal = 50;
-  } else if (levelId <= 60) {
-    mode = GameMode.SUBTRACTION;
+  } else if (levelId <= 70) {
+    // 61-70关为和不超过30的三个数加法
+    mode = GameMode.TARGET_SUM;
+    maxVal = 30;
+  } else if (levelId <= 80) {
+    // 71-80关为和不超过50的三个数加法
+    mode = GameMode.TARGET_SUM;
     maxVal = 50;
+  } else if (levelId <= 90) {
+    // 81-90关为70以内两个数加法
+    mode = GameMode.ADDITION;
+    maxVal = 70;
   } else {
+    // 91-100为100以内两个数加法
     mode = GameMode.ADDITION;
     maxVal = 100;
   }
 
+  // Adjusted grid size based on difficulty
   let gridSize = 4;
   if (levelId > 10) gridSize = 5;
   if (levelId > 30) gridSize = 6;
-  if (levelId > 50) gridSize = 7;
-  if (levelId > 75) gridSize = 8;
-  if (levelId > 90) gridSize = 9;
+  if (levelId > 60) gridSize = 7;
+  if (levelId > 85) gridSize = 8;
 
-  // 根据阶梯设定时间
   let timeLimit = 100;
-  if (levelId <= 10) timeLimit = 100;
-  else if (levelId <= 20) timeLimit = 90;
-  else if (levelId <= 30) timeLimit = 120;
-  else if (levelId <= 40) timeLimit = 110;
-  else if (levelId <= 60) timeLimit = 105;
-  else if (levelId <= 80) timeLimit = 100;
-  else if (levelId <= 100) timeLimit = 90;
+  if (levelId <= 20) {
+    timeLimit = 100;
+  } else if (levelId <= 40) {
+    timeLimit = 95;
+  } else if (levelId <= 50) {
+    timeLimit = 105;
+  } else if (levelId <= 60) {
+    timeLimit = 120;
+  } else if (levelId <= 70) {
+    timeLimit = 125;
+  } else if (levelId <= 80) {
+    timeLimit = 130;
+  } else {
+    timeLimit = 130;
+  }
 
-  const distractorRate = Math.min(0.5, (levelId / 180));
+  const distractorRate = Math.min(0.35, (levelId / 250));
   
   const specialRates: any = {};
-  if (levelId > 8) specialRates[BlockType.ICE] = Math.min(0.25, levelId * 0.006);
-  if (levelId > 20) specialRates[BlockType.LOCKED] = Math.min(0.2, levelId * 0.005);
+  if (levelId > 5) specialRates[BlockType.ICE] = Math.min(0.18, levelId * 0.004);
+  if (levelId > 25) specialRates[BlockType.LOCKED] = Math.min(0.12, levelId * 0.003);
   
-  // 确保第一关有炸弹方块出现的概率，后续关卡从40关开始再次出现并增加
-  if (levelId === 1) {
-    specialRates[BlockType.BOMB] = 0.1; 
-  } else if (levelId > 40) {
-    specialRates[BlockType.BOMB] = Math.min(0.15, levelId * 0.004);
+  if (levelId === 1 || levelId > 40) {
+    specialRates[BlockType.BOMB] = Math.min(0.1, levelId * 0.002 || 0.08);
   }
 
   return {

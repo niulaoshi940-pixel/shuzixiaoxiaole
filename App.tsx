@@ -29,6 +29,13 @@ const App: React.FC = () => {
 
   const handleLevelSelect = (levelId: number) => {
     if (levelId <= progress.unlockedLevel) {
+      // 核心修改：确保每一个新的关卡开始前，玩家至少拥有1个炸弹道具
+      if (progress.inventory.bomb < 1) {
+        setProgress(prev => ({
+          ...prev,
+          inventory: { ...prev.inventory, bomb: 1 }
+        }));
+      }
       setSelectedLevel(levelId);
       setGameState('game');
     }
@@ -45,12 +52,12 @@ const App: React.FC = () => {
       const newStars = { ...prev.stars };
       newStars[levelId] = Math.max(prev.stars[levelId] || 0, stars);
       
-      // 同步需累积的道具：炸弹和冻结
+      // 同步需累积的道具：炸弹和冻结。之前积累的还可以继续积累。
       const newInventory = { ...prev.inventory };
       newInventory.bomb = remainingInventory.bomb + (rewards.bomb || 0);
       newInventory.freeze = remainingInventory.freeze + (rewards.freeze || 0);
       
-      // 提示和重组不累积，在 GameView 中已处理，这里保持原有库存或设为初始值
+      // 提示和重组每关重置为3次，不跨关累积
       newInventory.hint = 3; 
       newInventory.refresh = 3;
 
