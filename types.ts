@@ -20,19 +20,19 @@ export interface Block {
   type: BlockType;
   isRemoved: boolean;
   isSelected: boolean;
-  lockCount: number; // For LOCKED type
-  bombTimer?: number; // For BOMB type (countdown steps)
-  isFiller?: boolean; // New: For blocks that just fill space (ice blocks in "empty" spots)
+  lockCount: number;
+  bombTimer?: number;
+  isFiller?: boolean;
 }
 
 export interface LevelConfig {
   id: number;
   mode: GameMode;
-  maxVal: number; // New: Maximum value for math operations
+  maxVal: number;
   gridSize: number;
   timeLimit: number;
   targetStars: number[];
-  distractorRate: number; // 0.0 to 1.0
+  distractorRate: number;
   specialRates: {
     [key in BlockType]?: number;
   };
@@ -41,6 +41,7 @@ export interface LevelConfig {
 export interface UserProgress {
   unlockedLevel: number;
   stars: { [levelId: number]: number };
+  claimedChests: number[]; // 已领取的宝箱关卡ID
   inventory: {
     hint: number;
     freeze: number;

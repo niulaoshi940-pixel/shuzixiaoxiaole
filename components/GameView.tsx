@@ -6,7 +6,7 @@ import { getLevelConfig, LEVEL_NAMES } from '../constants';
 interface GameViewProps {
   levelId: number;
   inventory: { hint: number; freeze: number; bomb: number; refresh: number };
-  onComplete: (levelId: number, stars: number, rewards: any, remainingInventory: any) => void;
+  onComplete: (levelId: number, stars: number, rewards: any, remainingInventory: any, skipLevels: number) => void;
   onQuit: () => void;
 }
 
@@ -22,7 +22,7 @@ const playSound = (type: 'match' | 'win' | 'hint' | 'useItem' | 'bomb') => {
     osc.frequency.setValueAtTime(type === 'bomb' ? 150 : 523.25, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(type === 'bomb' ? 40 : 1046.5, ctx.currentTime + 0.1);
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    gain.gain.exponentialRampToValueAtTime(type === 'bomb' ? 0.01 : 0.01, ctx.currentTime + 0.3);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
@@ -73,7 +73,7 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
   const [combo, setCombo] = useState(0);
   const [isGameOver, setIsGameOver] = useState(false);
   const [isVictory, setIsVictory] = useState(false);
-  const [victoryStats, setVictoryStats] = useState<{ stars: number; rewards: Record<string, number> }>({ stars: 0, rewards: {} });
+  const [victoryStats, setVictoryStats] = useState<{ stars: number; rewards: Record<string, number>; skipCount: number }>({ stars: 0, rewards: {}, skipCount: 0 });
   
   const [localHintCount, setLocalHintCount] = useState(3);
   const [localRefreshCount, setLocalRefreshCount] = useState(3);
@@ -84,27 +84,32 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
     let a, b, c;
     const maxVal = config.maxVal;
 
+    // 优化：尽量避免出现0，增加计算趣味性
+    const safeRandom = (max: number) => Math.max(1, Math.floor(Math.random() * max) + 1);
+
     if (config.mode === GameMode.ADDITION) {
-      c = Math.floor(Math.random() * (maxVal + 1)); 
-      a = Math.floor(Math.random() * (c + 1));
+      c = Math.max(2, Math.floor(Math.random() * (maxVal - 1)) + 2); // 至少是2
+      a = Math.max(1, Math.floor(Math.random() * (c - 1)) + 1); // 至少是1
       b = c - a;
     } else if (config.mode === GameMode.SUBTRACTION) {
-      a = Math.floor(Math.random() * (maxVal + 1));
-      b = Math.floor(Math.random() * (a + 1));
+      a = Math.max(2, Math.floor(Math.random() * (maxVal - 1)) + 2);
+      b = Math.max(1, Math.floor(Math.random() * (a - 1)) + 1);
       c = a - b;
     } else if (config.mode === GameMode.TARGET_SUM) {
       const target = config.maxVal;
-      a = Math.floor(Math.random() * (target + 1));
-      b = Math.floor(Math.random() * (target - a + 1));
+      // 确保a和b至少为1
+      a = Math.max(1, Math.floor(Math.random() * (target - 2)) + 1);
+      b = Math.max(1, Math.floor(Math.random() * (target - a - 1)) + 1);
       c = target - a - b;
     } else if (config.mode === GameMode.MULTIPLICATION) {
       const multMax = Math.max(5, Math.floor(Math.sqrt(maxVal)));
-      a = Math.floor(Math.random() * (multMax + 1));
-      b = Math.floor(Math.random() * (multMax + 1));
+      a = safeRandom(multMax);
+      b = safeRandom(multMax);
       c = a * b;
     } else {
-      c = Math.floor(Math.random() * 10);
-      b = Math.floor(Math.random() * 9) + 1;
+      // Division or unused logic fallback
+      c = safeRandom(10);
+      b = safeRandom(9);
       a = c * b;
     }
     return [a, b, c];
@@ -143,7 +148,7 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
       for (let j = 0; j < 3; j++) {
         newBlocks.push({
           id: Math.random().toString(36).substr(2, 9),
-          value: Math.floor(Math.random() * (maxDistVal + 1)),
+          value: Math.max(1, Math.floor(Math.random() * maxDistVal)), // 干扰项也尽量避免0
           type: BlockType.STANDARD,
           isRemoved: false,
           isSelected: false,
@@ -210,6 +215,7 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
   }, [isFrozen]);
 
   const handleBlockClick = (block: Block) => {
+    if (isFrozen) return; // 暂停状态不能点击
     if (block.isRemoved || block.type === BlockType.ICE || isGameOver || isVictory || block.isFiller) return;
     if (hintedIds.includes(block.id)) setHintedIds(prev => prev.filter(id => id !== block.id));
     if (selectedIds.includes(block.id)) {
@@ -287,14 +293,28 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
   const finishLevel = () => {
       if (isVictory) return;
       playSound('win');
-      let starCount = timeLeft > config.timeLimit * 0.6 ? 3 : (timeLeft > config.timeLimit * 0.3 ? 2 : 1);
+      
+      // 计算星星
+      const timeRatio = timeLeft / config.timeLimit;
+      let starCount = timeRatio > 0.6 ? 3 : (timeRatio > 0.3 ? 2 : 1);
+      
+      // 计算跳关逻辑
+      let skipCount = 0;
+      if (timeRatio > 0.75) {
+          skipCount = 2; // 极速：跳2关
+      } else if (timeRatio > 0.50) {
+          skipCount = 1; // 快速：跳1关
+      }
+
+      // 增加奖励的频率
       const rewards = { 
-        hint: 0, 
-        freeze: levelId % 10 === 0 ? 1 : 0, 
-        refresh: 0, 
-        bomb: levelId % 7 === 0 ? 1 : 0
+        hint: Math.random() > 0.6 ? 1 : 0,  // 40%概率给提示
+        freeze: levelId % 3 === 0 ? 1 : 0,  // 每3关给一个暂停
+        refresh: Math.random() > 0.7 ? 1 : 0, // 30%概率给刷新
+        bomb: levelId % 5 === 0 ? 1 : 0     // 每5关给一个炸弹
       };
-      setVictoryStats({ stars: starCount, rewards });
+
+      setVictoryStats({ stars: starCount, rewards, skipCount });
       setIsVictory(true);
   };
 
@@ -383,7 +403,7 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
       
       const maxDistVal = config.maxVal;
       while (newPool.length < newCount) {
-        newPool.push({ val: Math.floor(Math.random() * (maxDistVal + 1)), type: BlockType.STANDARD, lock: 0 });
+        newPool.push({ val: Math.max(1, Math.floor(Math.random() * maxDistVal)), type: BlockType.STANDARD, lock: 0 });
       }
       
       newPool.sort(() => Math.random() - 0.5);
@@ -446,6 +466,13 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
     }
   }, [config.mode, config.maxVal]);
 
+  const rewardIcons: Record<string, {icon: string, name: string, color: string}> = {
+    hint: { icon: '💡', name: '提示', color: 'text-yellow-600' },
+    freeze: { icon: '⏸️', name: '暂停', color: 'text-blue-600' },
+    bomb: { icon: '💣', name: '炸弹', color: 'text-red-600' },
+    refresh: { icon: '🔄', name: '刷新', color: 'text-orange-600' }
+  };
+
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden relative">
       {showHelp && (
@@ -479,7 +506,8 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
         <button onClick={onQuit} className="font-black bg-blue-700/50 border-2 border-white/20 px-4 py-2 rounded-xl active:scale-95 text-sm">退出</button>
         <div className="text-center">
             <h2 className="text-xl font-black italic">{locationName}</h2>
-            <div className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full uppercase tracking-widest font-bold">
+            {/* 放大字体并增加醒目颜色 */}
+            <div className="text-lg mt-1 font-black bg-yellow-400 text-blue-900 px-4 py-1 rounded-full shadow-lg border-2 border-white tracking-wide animate-pulse">
                 第 {levelId} 关 · {modeLabel}
             </div>
         </div>
@@ -492,10 +520,10 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
           {equationDisplay}
         </div>
         <div className="flex items-center gap-3">
-            {/* 冻结状态提示：现在集成到顶部的计分栏中，不遮挡棋盘 */}
+            {/* 暂停状态提示 */}
             {isFrozen && (
               <div className="flex items-center gap-1.5 bg-blue-200/50 px-3 py-1 rounded-full border border-blue-400 animate-pulse transition-all">
-                  <span className="text-xl">❄️</span>
+                  <span className="text-xl">⏸️</span>
                   <span className="text-xl font-black text-blue-600 tabular-nums">{freezeTimeRemaining.toFixed(1)}s</span>
               </div>
             )}
@@ -532,9 +560,9 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
           </button>
 
           <button onClick={useFreeze} disabled={accumulatedFreezeCount <= 0} className={`flex flex-col items-center group active:scale-95 transition-all relative ${accumulatedFreezeCount <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
-              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-blue-300 group-active:translate-y-1">❄️</div>
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-blue-300 group-active:translate-y-1">⏸️</div>
               <div className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">{accumulatedFreezeCount}</div>
-              <span className="text-xs font-black mt-2 text-blue-800 tracking-tighter">冻结</span>
+              <span className="text-xs font-black mt-2 text-blue-800 tracking-tighter">暂停</span>
           </button>
 
           <button onClick={useBombItem} disabled={accumulatedBombCount <= 0} className={`flex flex-col items-center group active:scale-95 transition-all relative ${accumulatedBombCount <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
@@ -546,19 +574,50 @@ const GameView: React.FC<GameViewProps> = ({ levelId, inventory, onComplete, onQ
           <button onClick={useRefresh} disabled={localRefreshCount <= 0} className={`flex flex-col items-center group active:scale-95 transition-all relative ${localRefreshCount <= 0 ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}>
               <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-3xl shadow-lg border-b-4 border-orange-300 group-active:translate-y-1">🔄</div>
               <div className="absolute -top-1 -right-1 bg-orange-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">{localRefreshCount}</div>
-              <span className="text-xs font-black mt-2 text-blue-800 tracking-tighter">重组</span>
+              <span className="text-xs font-black mt-2 text-blue-800 tracking-tighter">刷新</span>
           </button>
       </div>
 
       {isVictory && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center bg-blue-900/60 backdrop-blur-md p-8">
-              <div className="bg-white rounded-[3rem] p-10 w-full max-w-sm shadow-[0_25px_50px_rgba(0,0,0,0.5)] border-8 border-yellow-400 flex flex-col items-center transform scale-in">
+              <div className="bg-white rounded-[3rem] p-8 w-full max-w-sm shadow-[0_25px_50px_rgba(0,0,0,0.5)] border-8 border-yellow-400 flex flex-col items-center transform scale-in relative overflow-hidden">
                   <div className="absolute -top-16 text-8xl drop-shadow-2xl">🏆</div>
-                  <h2 className="text-3xl font-black text-blue-600 mt-4 mb-2 italic text-center">抵达{locationName}!</h2>
-                  <div className="flex gap-4 mb-8">
-                    {[1, 2, 3].map(s => (<div key={s} className={`text-6xl ${s <= victoryStats.stars ? 'text-yellow-400 animate-bounce' : 'text-gray-200 opacity-50'}`} style={{ animationDelay: `${s * 150}ms` }}>★</div>))}
+                  
+                  {/* 跳关动画提示 */}
+                  {victoryStats.skipCount > 0 && (
+                     <div className="absolute top-12 left-0 w-full bg-red-500 text-white text-center py-1 font-black text-sm uppercase tracking-widest shadow-lg -rotate-3 animate-pulse">
+                         🚀 神速！连跳 {victoryStats.skipCount} 关
+                     </div>
+                  )}
+
+                  <h2 className="text-3xl font-black text-blue-600 mt-8 mb-2 italic text-center">抵达{locationName}!</h2>
+                  
+                  <div className="flex gap-4 mb-4">
+                    {[1, 2, 3].map(s => (<div key={s} className={`text-5xl ${s <= victoryStats.stars ? 'text-yellow-400 animate-bounce' : 'text-gray-200 opacity-50'}`} style={{ animationDelay: `${s * 150}ms` }}>★</div>))}
                   </div>
-                  <button onClick={() => onComplete(levelId, victoryStats.stars, victoryStats.rewards, { hint: 3, refresh: 3, bomb: accumulatedBombCount, freeze: accumulatedFreezeCount })} className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-[0_10px_30px_rgba(59,130,246,0.5)] text-3xl border-b-8 border-blue-800 active:translate-y-2 active:border-b-4 transition-all">继续前进</button>
+
+                  {/* 战利品展示区域 */}
+                  <div className="w-full bg-blue-50 rounded-2xl p-4 mb-6 border-2 border-blue-100">
+                    <h4 className="text-center text-blue-400 font-bold text-sm mb-2 uppercase tracking-wide">本关战利品</h4>
+                    <div className="flex justify-center gap-4 flex-wrap">
+                        {Object.entries(victoryStats.rewards).filter(([_, count]) => count > 0).length === 0 ? (
+                            <span className="text-gray-400 text-sm font-bold">无额外道具</span>
+                        ) : (
+                            Object.entries(victoryStats.rewards).map(([key, count]) => (
+                                count > 0 && (
+                                    <div key={key} className="flex flex-col items-center bg-white p-2 rounded-xl shadow-sm border border-gray-100 min-w-[3.5rem]">
+                                        <span className="text-2xl mb-1">{rewardIcons[key].icon}</span>
+                                        <span className={`text-[10px] font-black ${rewardIcons[key].color}`}>+{count}</span>
+                                    </div>
+                                )
+                            ))
+                        )}
+                    </div>
+                  </div>
+
+                  <button onClick={() => onComplete(levelId, victoryStats.stars, victoryStats.rewards, { hint: 3, refresh: 3, bomb: accumulatedBombCount, freeze: accumulatedFreezeCount }, victoryStats.skipCount)} className="w-full bg-blue-600 text-white font-black py-4 rounded-3xl shadow-[0_10px_30px_rgba(59,130,246,0.5)] text-2xl border-b-8 border-blue-800 active:translate-y-2 active:border-b-4 transition-all">
+                      {victoryStats.skipCount > 0 ? `跳至第 ${Math.min(100, levelId + 1 + victoryStats.skipCount)} 关` : '继续前进'}
+                  </button>
               </div>
           </div>
       )}
